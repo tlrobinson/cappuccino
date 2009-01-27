@@ -191,48 +191,14 @@ var _CPTableViewWillDisplayCellSelector                         = 1 << 0,
     // Determine new visible rows and columns.
 
     var rowStart = MAX(0, [self _rowAtY:CGRectGetMinY(aRect)] - 1),
-        rowEnd = MIN(_numberOfRows, [self _rowAtY:CGRectGetMaxY(aRect)] + 1); // why does the limit need to be _numberOfRows rather than _numberOfRows-1?
+        rowEnd = MIN(_numberOfRows, [self _rowAtY:CGRectGetMaxY(aRect)] + 1),
         
-        visibleRows = CPMakeRange(rowStart, rowEnd - rowStart);
-
-    var columnStart = 0;
-
-    // Iterate through all our columns until we find the first one that intersects the rect.
-    while (columnStart < _numberOfColumns && !CGRectIntersectsRect([_tableColumnViews[columnStart] frame], aRect)) 
-        ++columnStart;
-        
-    // Now use a binary search to find the last visible column
-    // O (lg n) < O (n), but O(n) (above), so O (n + lg n) = O (n) ? 
-    var first = columnStart + 1,
-        last = _numberOfColumns - 1;
-        columnEnd = columnStart;
+        visibleRows = CPMakeRange(rowStart, rowEnd - rowStart),
     
-    while (first <= last)
-    {
-        // Assume this is the one.
-        var columnEnd = FLOOR((first + last) / 2),
-            columnIsVisible = CGRectIntersectsRect([_tableColumnViews[columnEnd] frame], aRect);
-            
-        // If the column isn't visible, look left!
-        if (!columnIsVisible)
-            last = columnEnd - 1;
+        columnStart = MAX(0, [self _columnAtX:CGRectGetMinX(aRect)]),
+        columnEnd   = MIN(_numberOfColumns, [self _columnAtX:CGRectGetMaxX(aRect)] + 1),
         
-        // Visible, nothing to the right, found it...
-        if (columnEnd + 1 >= _numberOfColumns)
-            break;
-        
-        // Visible, column to the right is NOT visible, found it! (the good way)
-        if (!CGRectIntersectsRect([_tableColumnViews[columnEnd + 1] frame], aRect))
-            break;
-        
-        // If not, look right! (2 since we checked the dude to the right already)
-        first = columnEnd + 2;
-    }
-    
-    // columnEnd is our "count" in loops.
-    ++columnEnd;
-    
-    var visibleColumns = CPMakeRange(columnStart, columnEnd - columnStart);
+        visibleColumns = CPMakeRange(columnStart, columnEnd - columnStart);
 
     if (CPEqualRanges(_visibleRows, visibleRows) && CPEqualRanges(_visibleColumns, visibleColumns))
         return;
@@ -439,6 +405,7 @@ var _CPTableViewWillDisplayCellSelector                         = 1 << 0,
 
     [_tableCells addObject:tableColumnCells];
 
+    // TODO: do we really need to initialize this, or is undefined good enough?
     for (; i < _numberOfRows; ++i)
         _tableCells[_numberOfColumns][i] = nil;
         
@@ -834,16 +801,26 @@ var _CPTableViewWillDisplayCellSelector                         = 1 << 0,
 {
     var index = [self _rowAtY:aPoint.y]
     
-    if (index < 0 || index >= _numberOfRows)
-        return CPNotFound;
-    else
+    if (index >= 0 && index < _numberOfRows)
         return index;
+    else
+        return CPNotFound;
+}
+
+- (int)columnAtPoint:(CGPoint)aPoint
+{
+    var index = [self _columnAtY:aPoint.x]
+    
+    if (index >= 0 && index < _numberOfColumns)
+        return index;
+    else
+        return CPNotFound;
 }
 
 /*
     @ignore
     
-    Internal version takes a Y value, returns an index, or -1 if its to high, or numberOfRows if it's too low
+    Internal version takes a Y value, returns an index, or -1 if its beyond the min, or numberOfRows if it's beyond the max
 */
 - (int)_rowAtY:(float)y
 {
@@ -861,6 +838,10 @@ var _CPTableViewWillDisplayCellSelector                         = 1 << 0,
         while (true)
         {
             var half = a + Math.floor((b - a) / 2);
+            
+            if (half === _numberOfRows - 1)
+                return _numberOfRows - 1;
+            
             if (y >= _rowMinYs[half+1])
                 a = half;
             else if (y < _rowMinYs[half])
@@ -871,6 +852,39 @@ var _CPTableViewWillDisplayCellSelector                         = 1 << 0,
     }
     else
         return FLOOR(y / (_rowHeight + _intercellSpacing.height));
+}
+
+/*
+    @ignore
+    
+    Internal version takes a X value, returns an index, or -1 if its beyond the min, or numberOfColumns if it's beyond the max
+*/
+- (int)_columnAtX:(float)y
+{
+    var a = 0,
+        b = _numberOfColumns;
+        
+    var last = [_tableColumnViews[_numberOfColumns-1] frame];
+    if (y < [_tableColumnViews[0] frame].origin.x)
+        return -1;
+    if (y >= last.origin.x + last.size.width)
+        return _numberOfColumns;
+
+    // binary search
+    while (true)
+    {
+        var half = a + Math.floor((b - a) / 2);
+
+        if (half === _numberOfColumns - 1)
+            return _numberOfColumns - 1;
+            
+        if (y >= [_tableColumnViews[half+1] frame].origin.x)
+            a = half;
+        else if (y < [_tableColumnViews[half] frame].origin.x)
+            b = half;
+        else
+            return half;
+    }
 }
 
 /*

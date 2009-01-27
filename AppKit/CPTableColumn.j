@@ -68,10 +68,10 @@ CPTableColumnUserResizingMask   = 2;
     
     unsigned    _resizingMask;
 
-    CPView      _dataView;
+    CPView      _dataView;                  // default data view for this column
 
-    Object      _dataViewData;
-    Object      _dataViewForView;
+    Object      _dataViewData;              // cache of data view archives
+    Object      _dataViewForView;           // mapping from view instances back to their data view prototype
     Object      _purgableInfosForDataView;
 }
 
@@ -317,7 +317,7 @@ CPTableColumnUserResizingMask;
 {
     return [self dataCellForRow:aRowIndex];
 }
-
+/*
 - (void)_markViewAsPurgable:(CPView)aView
 {
     var viewHash = [aView hash],
@@ -328,7 +328,7 @@ CPTableColumnUserResizingMask;
     
     [_purgableInfosForDataView[dataViewHash] setObject:aView forKey:viewHash];
 }
-
+*/
 - (void)_markView:(CPView)aView inRow:(unsigned)aRow asPurgable:(BOOL)isPurgable
 {
     var viewHash = [aView hash],
@@ -352,11 +352,9 @@ CPTableColumnUserResizingMask;
 {
     var view = [self dataViewForRow:aRowIndex],
         viewHash = [view hash],
-        dataViewHash = [_dataViewForView[viewHash] hash],
-        purgableInfos = _purgableInfosForDataView[dataViewHash];
-    //console.warn("ok, a cell is needed");
+        purgableInfos = _purgableInfosForDataView[viewHash];
     if (purgableInfos && [purgableInfos count])
-    {//console.warn("yes, inside");
+    {
         var keys = [purgableInfos allKeys],
             count = keys.length;
         
@@ -369,25 +367,24 @@ CPTableColumnUserResizingMask;
             
             if (CPLocationInRange(PurgableInfoRow(info), rows))
                 continue;
-            //console.warn("yes, a purged view is usable, its called" + PurgableInfoView(info));
+            CPLog.debug("yes, a purged view is usable, its called: " + PurgableInfoView(info));
             return PurgableInfoView(info);
         }
     }
     
-    var data = _dataViewData[viewHash];
-    
-    if (!data)
-    {
+    // if we haven't cached an archive of the data view, do it now
+    if (!_dataViewData[viewHash])
         _dataViewData[viewHash] = [CPKeyedArchiver archivedDataWithRootObject:view];
-        data = _dataViewData[viewHash];
-    }
-    //console.warn("nope, time for creation");
-    return [CPKeyedUnarchiver unarchiveObjectWithData:data];
+
+    // unarchive the data view cache
+    var newView = [CPKeyedUnarchiver unarchiveObjectWithData:_dataViewData[viewHash]];
+    
+    // map the new view's hash to it's data view prototype
+    _dataViewForView[[newView hash]] = view;
+    
+    CPLog.error("nope, time for creation: %s", newView);
+    
+    return newView;
 }
 
 @end
-
-_PurgableViewInfoMake = function(aView, aRow)
-{
-    return { view:aView, row:aRow};
-}
