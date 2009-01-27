@@ -101,6 +101,11 @@ var CPControlBlackColor     = [CPColor blackColor];
     
     CPDictionary    _backgroundColors;
     CPString        _currentBackgroundColorName;
+    
+    BOOL        _continuousTracking;
+    BOOL        _trackingWasWithinFrame;
+    unsigned    _trackingMouseDownFlags;
+    CGPoint     _previousTrackingLocation;
 }
 
 - (id)initWithFrame:(CGRect)aFrame
@@ -110,6 +115,8 @@ var CPControlBlackColor     = [CPColor blackColor];
     if (self)
     {
         _sendActionOn = CPLeftMouseUpMask;
+        _trackingMouseDownFlags = 0;
+        
         _isEnabled = YES;
         
         [self setFont:[CPFont systemFontOfSize:12.0]];
@@ -256,13 +263,82 @@ var CPControlBlackColor     = [CPColor blackColor];
     _target = aTarget;
 }
 
-- (void)mouseUp:(CPEvent)anEvent
+- (BOOL)tracksMouseOutsideOfFrame
 {
-    if (_sendActionOn & CPLeftMouseUpMask && CPRectContainsPoint([self bounds], [self convertPoint:[anEvent locationInWindow] fromView:nil]))
+    return NO;
+}
+
+- (void)trackMouse:(CPEvent)anEvent
+{
+    var type = [anEvent type],
+        currentLocation = [self convertPoint:[anEvent locationInWindow] fromView:nil];
+        isWithinFrame = [self tracksMouseOutsideOfFrame] || CGRectContainsPoint([self bounds], currentLocation);
+
+    if (type === CPLeftMouseUp)
+    {
+        [self stopTracking:_previousTrackingLocation at:currentLocation mouseIsUp:YES];
+        
+        _trackingMouseDownFlags = 0;
+    }
+    
+    else
+    {
+        if (type === CPLeftMouseDown)
+        {
+            _trackingMouseDownFlags = [anEvent modifierFlags];
+            _continuousTracking = [self startTrackingAt:currentLocation];
+        }
+        else if (type === CPLeftMouseDragged)
+        {
+            if (isWithinFrame)
+            {
+                if (!_trackingWasWithinFrame)
+                    _continuousTracking = [self startTrackingAt:currentLocation];
+                
+                else if (_continuousTracking)
+                    _continuousTracking = [self continueTracking:_previousTrackingLocation at:currentLocation];
+            }
+            else
+                [self stopTracking:_previousTrackingLocation at:currentLocation mouseIsUp:NO];
+        }
+        
+        [CPApp setTarget:self selector:@selector(trackMouse:) forNextEventMatchingMask:CPLeftMouseDraggedMask | CPLeftMouseUpMask untilDate:nil inMode:nil dequeue:YES];
+    }
+    
+    if ((_sendActionOn & (1 << type)) && isWithinFrame)
         [self sendAction:_action to:_target];
     
-    [super mouseUp:anEvent];
+    _trackingWasInFrame = isWithinFrame;
+    _previousTrackingLocation = currentLocation;
 }
+
+- (unsigned)mouseDownFlags
+{
+    return _trackingMouseDownFlags;
+}
+
+- (BOOL)startTrackingAt:(CGPoint)aPoint
+{
+    return (_sendActionOn & CPPeriodicMask) || (_sendActionOn & CPLeftMouseDraggedMask);
+}
+
+- (BOOL)continueTracking:(CGPoint)lastPoint at:(CGPoint)aPoint
+{
+    return (_sendActionOn & CPPeriodicMask) || (_sendActionOn & CPLeftMouseDraggedMask);
+}
+
+- (void)stopTracking:(CGPoint)lastPoint at:(CGPoint)aPoint mouseIsUp:(BOOL)mouseIsUp
+{
+}
+
+- (void)mouseDown:(CPEvent)anEvent
+{
+    if (!_isEnabled)
+        return;
+    
+    [self trackMouse:anEvent];
+}
+
 
 /*!
     Causes <code>anAction</code> to be sent to <code>anObject</code>.
@@ -289,7 +365,7 @@ var CPControlBlackColor     = [CPColor blackColor];
 - (BOOL)isContinuous
 {
     // Some subclasses should redefine this with CPLeftMouseDraggedMask
-    return (_sendActionOn & CPPeriodicMask) != 0;
+    return (_sendActionOn & CPPeriodicMask) !== 0;
 }
 
 /*!

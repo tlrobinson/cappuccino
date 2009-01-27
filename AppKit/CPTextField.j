@@ -248,11 +248,13 @@ var _CPTextFieldSquareBezelColor = nil,
     
     _bezelStyle = aBezelStyle;
     
+#if PLATFORM(DOM)
     if (aBezelStyle == CPTextFieldRoundedBezel)
         _DOMTextElement.style.paddingLeft = ROUNDEDBEZEL_HORIZONTAL_PADDING - 1.0 + "px";        
     else 
         _DOMTextElement.style.paddingLeft = "0px";        
-        
+#endif
+
     [self _updateBackground];
 }
 
@@ -513,6 +515,14 @@ var _CPTextFieldSquareBezelColor = nil,
     return YES;
 }
 
+- (void)mouseDown:(CPEvent)anEvent
+{
+    if (![self isEditable])
+        return [[self nextResponder] mouseDown:anEvent];
+        
+    [super mouseDown:anEvent];
+}
+/*
 - (void)mouseUp:(CPEvent)anEvent
 {    
     if (_isEditable && [[self window] firstResponder] == self)
@@ -520,7 +530,7 @@ var _CPTextFieldSquareBezelColor = nil,
         
     [super mouseUp:anEvent];
 }
-
+*/
 /*! 
     Sets whether or not the receiver text field can be edited
 */
@@ -666,11 +676,14 @@ var _CPTextFieldSquareBezelColor = nil,
 #if PLATFORM(DOM)
     var displayString = "";
 
-    if (aValue && [aValue respondsToSelector:@selector(string)])
-        displayString = [aValue string];
-    else if (aValue)
-        displayString += aValue;
-
+    if (aValue !== nil && aValue !== undefined)
+    {
+        if ([aValue respondsToSelector:@selector(string)])
+            displayString = [aValue string];
+        else
+            displayString += aValue;
+    }
+    
     if ([[self window] firstResponder] == self)
         [[self class] _inputElement].value = displayString;
 
