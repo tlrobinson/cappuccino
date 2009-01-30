@@ -70,9 +70,9 @@ CPTableColumnUserResizingMask   = 2;
 
     CPView      _dataView;                  // default data view for this column
 
-    Object      _dataViewData;              // cache of data view archives
-    Object      _dataViewForView;           // mapping from view instances back to their data view prototype
-    Object      _purgableInfosForDataView;
+    Object      _dataViewData;              // cache of data view archives (key=data view hash, value=data view archive)
+    Object      _dataViewForView;           // mapping from view instances back to their data view prototype (key=view instance hash, value=data view)
+    Object      _purgableInfosForDataView;  // (key=data view hash, value=)
 }
 
 /*!
@@ -339,13 +339,13 @@ CPTableColumnUserResizingMask;
         if (!isPurgable)
             return;
         
-        _purgableInfosForDataView[dataViewHash] = [CPDictionary dictionary];
+        _purgableInfosForDataView[dataViewHash] = {};
     }
     
     if (!isPurgable)
-        [_purgableInfosForDataView[dataViewHash] removeObjectForKey:viewHash];
+        delete _purgableInfosForDataView[dataViewHash][viewHash];
     else
-        [_purgableInfosForDataView[dataViewHash] setObject:PurgableInfoMake(aView, aRow) forKey:viewHash];
+        _purgableInfosForDataView[dataViewHash][viewHash] = PurgableInfoMake(aView, aRow);
 }
 
 - (CPView)_newDataViewForRow:(int)aRowIndex avoidingRows:(CPRange)rows
@@ -353,22 +353,18 @@ CPTableColumnUserResizingMask;
     var view = [self dataViewForRow:aRowIndex],
         viewHash = [view hash],
         purgableInfos = _purgableInfosForDataView[viewHash];
-    if (purgableInfos && [purgableInfos count])
+    
+    if (purgableInfos)
     {
-        var keys = [purgableInfos allKeys],
-            count = keys.length;
-        
-        while (count--)
+        for (var key in purgableInfos)
         {
-            var key = keys[count],
-                info = [purgableInfos objectForKey:key];
-            
-            [purgableInfos removeObjectForKey:key];
-            
-            if (CPLocationInRange(PurgableInfoRow(info), rows))
-                continue;
-            CPLog.debug("yes, a purged view is usable, its called: " + PurgableInfoView(info));
-            return PurgableInfoView(info);
+            var info = purgableInfos[key];
+            if (!CPLocationInRange(PurgableInfoRow(info), rows))
+            {
+                //CPLog.debug("yes, a purged view is usable, its called: " + PurgableInfoView(info));
+                delete purgableInfos[key];
+                return PurgableInfoView(info);
+            }
         }
     }
     
@@ -382,7 +378,7 @@ CPTableColumnUserResizingMask;
     // map the new view's hash to it's data view prototype
     _dataViewForView[[newView hash]] = view;
     
-    CPLog.error("nope, time for creation: %s", newView);
+    //CPLog.warn("nope, time for creation: %s", newView);
     
     return newView;
 }
