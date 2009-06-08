@@ -1,4 +1,10 @@
 @import <Foundation/Foundation.j>
+@import <AppKit/AppKit.j>
+
+// JSCocoa: http://code.google.com/p/jscocoa/
+// MacRuby: http://www.macruby.org/
+// RubyCocoa: http://rubycocoa.sourceforge.net/
+// PyObjC: http://pyobjc.sourceforge.net/
 
 objj_class.prototype._ =
 objj_object.prototype._ =
@@ -51,8 +57,56 @@ function aliasSelectorC(aClass, aSelector, aName)
     aliasSelector(aClass, aSelector, aName, "on '"+aClass.name+"' class");
 }
 
+function autoAlias(object, stats) {
+    stats = stats || {};
+    if (stats.debug) print(object.name);
+    
+    for (var i = 0; i < object.method_list.length; i++) {
+        var selector = object.method_list[i].name,
+            method = selector;
+    
+        method = method.replace(/:$/, "");
+        //method = method.replace(/_/g, "__");    
+        method = method.replace(/:/g, "_");
+    
+        try {
+            aliasSelectorI(object, selector, method);
+            
+            if (stats.debug) print("    mapped \"" + selector + "\" to \"" + method + "\"");
+            stats.mapped++;
+        } catch (e) {
+            if (stats.debug) print("    FAIL \"" + selector + "\" to \"" + method + "\"");
+            stats.errors++;
+        }
+    }
+}
+
+function autoAliasAll() {
+    var dbg = false;
+    
+    var istats = { errors : 0, mapped : 0, start : new Date(), debug : dbg };
+    if (istats.debug) print("INSTANCE METHODS:")
+    for (var className in REGISTERED_CLASSES)
+        autoAlias(REGISTERED_CLASSES[className], istats);
+    istats.end = new Date();
+    
+    var cstats = { errors : 0, mapped : 0, start : new Date(), debug : dbg };
+    if (cstats.debug) print("CLASS METHODS:")
+    for (var className in REGISTERED_CLASSES)
+        autoAlias(REGISTERED_CLASSES[className].isa, cstats);
+    cstats.end = new Date();
+    
+    print("INSTANCE METHODS: mapped="+istats.mapped+" errors="+istats.errors+" elapsed=" + (istats.end - istats.start)+"ms");
+    print("CLASS METHODS:    mapped="+cstats.mapped+" errors="+cstats.errors+" elapsed=" + (cstats.end - cstats.start)+"ms");
+}
+
+autoAliasAll();
+
 aliasSelectorC(CPObject, "alloc", "alloc");
-aliasSelectorI(CPObject, "init", "init");
+//aliasSelectorI(CPObject, "init", "init");
+//aliasSelectorI(CPArray, "init", "init");
+aliasSelectorC(CPArray, "arrayWithArray:", "arrayWithArray");
+
 
 var a = [[CPObject alloc] init];
 print(a);
@@ -63,8 +117,6 @@ print(a);
 var a = CPObject.alloc().init();
 print(a);
 
-//aliasSelectorI(CPArray, "init", "init");
-aliasSelectorC(CPArray, "arrayWithArray:", "arrayWithArray");
 
 /*
 asdf = function() {
